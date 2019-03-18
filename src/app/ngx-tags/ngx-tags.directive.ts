@@ -8,7 +8,6 @@ import {
   OnInit,
   Renderer
 } from '@angular/core';
-import { Container } from '@angular/compiler/src/i18n/i18n_ast';
 
 @Directive({
   selector: '[ngxTags]'
@@ -16,8 +15,8 @@ import { Container } from '@angular/compiler/src/i18n/i18n_ast';
 export class NgxTagsDirective implements OnInit {
   @Input() ngxTags: ComponentRef<any>;
 
-  container: Container;
-  lastRect;
+  private blockCursorSize: { height: number, width: number };
+
 
   constructor(
     private ele: ElementRef,
@@ -29,56 +28,128 @@ export class NgxTagsDirective implements OnInit {
   ngOnInit() {
     this.renderer.listen(this.ele.nativeElement, 'input', $event => {
       if ($event.data === '@') {
-        console.log(window.getComputedStyle(this.ele.nativeElement).getPropertyValue('font-size'));
-        console.log($event);
-
-        this.loadComponent(this.ngxTags);
-
-        this.createCaretPositionEle($event);
+        this.loadComponent(this.ngxTags, $event);
       }
     });
   }
 
-  loadComponent(component) {
+  loadComponent(component, $event) {
     const componentFactory = this.componentFactoryResolver.resolveComponentFactory(component);
 
     this.viewContainerRef.clear();
 
     const componentRef = this.viewContainerRef.createComponent(componentFactory) as ComponentRef<any>;
 
+    this.createCaretPositionEle($event);
     console.log(componentRef);
   }
 
   /** 建立計算目前指標位置的element */
   createCaretPositionEle($event) {
-    const caretEle = document.getElementsByClassName('caretDiv');
-    if (caretEle.length) {
-      caretEle[0].parentNode.removeChild(caretEle[0]);
+
+    const element = $event.target;
+    const properties = [
+      'direction',
+      'boxSizing',
+      'width',
+      'height',
+      'overflowX',
+      'overflowY',
+
+      'borderTopWidth',
+      'borderRightWidth',
+      'borderBottomWidth',
+      'borderLeftWidth',
+      'borderStyle',
+
+      'paddingTop',
+      'paddingRight',
+      'paddingBottom',
+      'paddingLeft',
+
+      'fontStyle',
+      'fontVariant',
+      'fontWeight',
+      'fontStretch',
+      'fontSize',
+      'fontSizeAdjust',
+      'lineHeight',
+      'fontFamily',
+
+      'textAlign',
+      'textTransform',
+      'textIndent',
+      'textDecoration',  // might not make a difference, but better be safe
+
+      'letterSpacing',
+      'wordSpacing',
+
+      'tabSize',
+      'MozTabSize'
+    ];
+
+    this.blockCursorSize = this.getBlockCursorDimensions(element);
+    const scrollToHeightDiff = (element.scrollHeight - element.clientHeight);
+    const scrollToWidthDiff = (element.scrollWidth - element.clientWidth);
+    let coords = { top: 0, left: 0 };
+
+    const div = document.createElement('div');
+    div.id = 'input-textarea-caret-position-mirror-div';
+    document.body.appendChild(div);
+
+    const style = div.style;
+    const computed = window.getComputedStyle ? getComputedStyle(element) : element.currentStyle;
+
+    style.whiteSpace = 'pre-wrap';
+    if (element.nodeName !== 'INPUT') {
+      style.wordWrap = 'break-word';
+    }
+    style.position = 'absolute';
+
+    properties.forEach(function (prop) {
+      style[prop] = computed[prop];
+    });
+
+    const isBrowser = (typeof window !== 'undefined');
+    const isFirefox = (isBrowser && (<any>window).mozInnerScreenX != null);
+    if (isFirefox) {
+      if (element.scrollHeight > parseInt(computed.height)) {
+        style.overflowY = 'scroll';
+      }
+    } else {
+      style.overflow = 'hidden';
     }
 
-    const textareaMirror = this.createElement('div', document.body, 'caretDiv');
-    textareaMirror.style.position = 'absolute';
-    textareaMirror.style.whiteSpace = 'pre';
-    textareaMirror.style.left = `${$event.target.offsetLeft}px`;
-    textareaMirror.style.top = `${$event.target.offsetTop - $event.target.scrollTop}px`;
+    div.textContent = element.value.substring(0, element.selectionStart);
+    if (element.nodeName === 'INPUT') {
+      div.textContent = div.textContent.replace(/\s/g, '\u00a0');
+    }
 
-    const textareaMirrorInline = this.createElement('span', textareaMirror);
-    textareaMirrorInline.style.opacity = 0;
+    const span = document.createElement('span');
+    span.textContent = element.value.substring(element.selectionStart) || '.';
+    div.appendChild(span);
 
-    textareaMirrorInline.innerHTML = $event.target.value.substr(0, $event.target.selectionStart).replace(/\n/ig, '\n');
+    coords = {
+      top: span.offsetTop + parseInt(computed['borderTopWidth']),
+      left: span.offsetLeft + parseInt(computed['borderLeftWidth'])
+    };
 
-    const rects = textareaMirrorInline.getClientRects();
-    this.lastRect = rects[rects.length - 1];
+    coords.top = element.offsetTop - scrollToHeightDiff + coords.top + this.blockCursorSize.width;
+    coords.left = element.offsetLeft - (scrollToWidthDiff ? scrollToWidthDiff + this.blockCursorSize.width : 0) + coords.left;
+
+    console.log(coords);
+
   }
 
-  /** 建立element */
-  createElement(type, parent, className?) {
-    const el = document.createElement(type);
-    parent.appendChild(el);
-    if (className) {
-      el.className = className;
+  private getBlockCursorDimensions(nativeParentElement: HTMLInputElement) {
+    if (this.blockCursorSize) {
+      return this.blockCursorSize;
     }
-    return el;
+    const parentStyles = window.getComputedStyle(nativeParentElement);
+    return {
+      height: parseFloat(parentStyles.lineHeight) || 1,
+      width: parseFloat(parentStyles.fontSize)
+    };
   }
 
 }
