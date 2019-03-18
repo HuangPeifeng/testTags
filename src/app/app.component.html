@@ -20,5 +20,5 @@
 
 <div class="input">
   <!-- <input type="text" [ngxTags]="component"> -->
-  <textarea [ngxTags]="component"></textarea>
+  <textarea [ngxTags]="component" [ngxTagsFactory]="factory" (ngxTagsOutput)="ngxTagsOutput($event)"></textarea>
 </div>

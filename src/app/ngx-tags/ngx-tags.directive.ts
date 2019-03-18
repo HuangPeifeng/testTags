@@ -6,14 +6,26 @@ import {
   Input,
   ComponentRef,
   OnInit,
-  Renderer
+  Renderer,
+  Output,
+  EventEmitter
 } from '@angular/core';
+import { MentionDialogComponent } from './mention-dialog/mention-dialog.component';
+import { NgxFactory, NgxPosition } from './ngx-tags';
 
 @Directive({
   selector: '[ngxTags]'
 })
 export class NgxTagsDirective implements OnInit {
   @Input() ngxTags: ComponentRef<any>;
+  @Input() ngxTagsFactory: NgxFactory;
+  @Input() ngxTagsOption = '@' as string;
+  @Input() ngxTagsData: any;
+
+  @Output() ngxTagsOutput = new EventEmitter;
+
+  componentRef: ComponentRef<any>;
+  isOpenDialog = false;
 
   private blockCursorSize: { height: number, width: number };
 
@@ -26,22 +38,53 @@ export class NgxTagsDirective implements OnInit {
   ) { }
 
   ngOnInit() {
-    this.renderer.listen(this.ele.nativeElement, 'input', $event => {
-      if ($event.data === '@') {
-        this.loadComponent(this.ngxTags, $event);
-      }
-    });
+    this.renderer.listen(
+      this.ele.nativeElement,
+      'input',
+      $event => {
+        if (!this.isOpenDialog) {
+          if ($event.data === this.ngxTagsOption) {
+            this.loadComponent(this.ngxTags, this.ngxTagsFactory, $event);
+            this.isOpenDialog = true;
+          }
+        } else {
+          console.log($event.target.value);
+        }
+      });
+
+    this.renderer.listen(
+      document.body,
+      'click',
+      $event => {
+        if (this.componentRef) {
+          this.closeDialog();
+        }
+      });
   }
 
-  loadComponent(component, $event) {
-    const componentFactory = this.componentFactoryResolver.resolveComponentFactory(component);
+  loadComponent(component: ComponentRef<any>, factory: NgxFactory, $event) {
+    const componentFactory = this.componentFactoryResolver.resolveComponentFactory(MentionDialogComponent);
 
     this.viewContainerRef.clear();
 
-    const componentRef = this.viewContainerRef.createComponent(componentFactory) as ComponentRef<any>;
+    this.componentRef = this.viewContainerRef.createComponent(componentFactory);
 
-    this.createCaretPositionEle($event);
-    console.log(componentRef);
+    const position = (this.createCaretPositionEle($event)) as NgxPosition;
+
+    this.componentRef.instance.component = component;
+    this.componentRef.instance.factory = factory;
+    this.componentRef.instance.position = position;
+    this.componentRef.instance.data = this.ngxTagsData;
+
+    this.componentRef.instance.send.subscribe(x => {
+      this.ngxTagsOutput.next(x);
+      this.closeDialog();
+    });
+  }
+
+  closeDialog() {
+    this.isOpenDialog = false;
+    this.componentRef.destroy();
   }
 
   /** 建立計算目前指標位置的element */
@@ -137,8 +180,12 @@ export class NgxTagsDirective implements OnInit {
     coords.top = element.offsetTop - scrollToHeightDiff + coords.top + this.blockCursorSize.width;
     coords.left = element.offsetLeft - (scrollToWidthDiff ? scrollToWidthDiff + this.blockCursorSize.width : 0) + coords.left;
 
-    console.log(coords);
+    document.body.removeChild(div);
 
+    return {
+      left: `${coords.left}px`,
+      top: `${coords.top}px`
+    };
   }
 
   private getBlockCursorDimensions(nativeParentElement: HTMLInputElement) {
