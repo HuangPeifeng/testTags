@@ -19,13 +19,20 @@ import { NgxFactory, NgxPosition } from './ngx-tags';
 export class NgxTagsDirective implements OnInit {
   @Input() ngxTags: ComponentRef<any>;
   @Input() ngxTagsFactory: NgxFactory;
-  @Input() ngxTagsOption = '@' as string;
+  @Input() ngxTagsKey = '@' as string;
+  @Input() ngxTagsProperty = 'name';
   @Input() ngxTagsData: any;
 
   @Output() ngxTagsOutput = new EventEmitter;
 
   componentRef: ComponentRef<any>;
   isOpenDialog = false;
+  keyStart = null;
+  keyBefore = '';
+  ketAfter = '';
+  isInput = false;
+  inputEle = null;
+  inputVal = '';
 
   private blockCursorSize: { height: number, width: number };
 
@@ -43,12 +50,26 @@ export class NgxTagsDirective implements OnInit {
       'input',
       $event => {
         if (!this.isOpenDialog) {
-          if ($event.data === this.ngxTagsOption) {
+          if ($event.data === this.ngxTagsKey) {
             this.loadComponent(this.ngxTags, this.ngxTagsFactory, $event);
             this.isOpenDialog = true;
+            this.keyStart = $event.target.selectionStart;
           }
         } else {
-          console.log($event.target.value);
+          const allValue = this.inputEle.target.value;
+
+          if (!this.isInput) {
+            this.keyBefore = allValue.substr(0, this.keyStart - 1);
+            this.ketAfter = allValue.substr(this.keyStart + 1);
+            this.isInput = true;
+          }
+
+          this.inputVal = allValue.replace(this.keyBefore, '').replace(this.ketAfter, '').replace(this.ngxTagsKey, '');
+          console.log(this.inputVal);
+
+          // this.inputVal = this.inputVal + $event.data;
+          this.componentRef.instance.inputValue.next(this.inputVal);
+
         }
       });
 
@@ -63,6 +84,8 @@ export class NgxTagsDirective implements OnInit {
   }
 
   loadComponent(component: ComponentRef<any>, factory: NgxFactory, $event) {
+    this.inputEle = $event;
+
     const componentFactory = this.componentFactoryResolver.resolveComponentFactory(MentionDialogComponent);
 
     this.viewContainerRef.clear();
@@ -76,20 +99,39 @@ export class NgxTagsDirective implements OnInit {
     this.componentRef.instance.position = position;
     this.componentRef.instance.data = this.ngxTagsData;
 
-    this.componentRef.instance.send.subscribe(x => {
-      this.ngxTagsOutput.next(x);
+    this.componentRef.instance.send.subscribe(sendVal => {
+      this.ngxTagsOutput.next(sendVal);
+      this.setMention(sendVal);
       this.closeDialog();
     });
+
+    this.renderer.listen(
+      this.inputEle.target,
+      'click',
+      clickEvent => {
+        clickEvent.preventDefault();
+        clickEvent.stopPropagation();
+        clickEvent.stopImmediatePropagation();
+      });
   }
 
   closeDialog() {
     this.isOpenDialog = false;
+    this.reset();
     this.componentRef.destroy();
+  }
+
+  /** 將所選的項目替換至input element中 */
+  setMention(value) {
+    const allValue = this.inputEle.target.value;
+    const beforeStr = allValue.substr(0, this.keyStart - 1);
+    const afterStr = allValue.substr(this.keyStart + this.inputVal.length);
+
+    this.inputEle.target.value = `${beforeStr} @${value[this.ngxTagsProperty]} ${afterStr}`;
   }
 
   /** 建立計算目前指標位置的element */
   createCaretPositionEle($event) {
-
     const element = $event.target;
     const properties = [
       'direction',
@@ -197,6 +239,17 @@ export class NgxTagsDirective implements OnInit {
       height: parseFloat(parentStyles.lineHeight) || 1,
       width: parseFloat(parentStyles.fontSize)
     };
+  }
+
+  /** 重設參數 */
+  reset() {
+    this.isOpenDialog = false;
+    this.keyStart = null;
+    this.keyBefore = '';
+    this.ketAfter = '';
+    this.isInput = false;
+    this.inputEle = null;
+    this.inputVal = '';
   }
 
 }

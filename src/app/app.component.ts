@@ -19,10 +19,10 @@ export class AppComponent {
     this.factory = {
       resolver: this._resolver,
       injector: this._injector
-    }
+    };
   }
 
   ngxTagsOutput($event) {
-    console.log($event);
+    // console.log($event);
   }
 }

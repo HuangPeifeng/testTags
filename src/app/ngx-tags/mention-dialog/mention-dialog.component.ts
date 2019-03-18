@@ -1,4 +1,4 @@
-import { Component, OnInit, Input, ViewChild, ReflectiveInjector, Output, EventEmitter, Renderer, ElementRef } from '@angular/core';
+import { Component, OnInit, Input, ViewChild, ReflectiveInjector, Output, EventEmitter, Renderer, ElementRef, ComponentRef } from '@angular/core';
 import { MentionDialogDirective } from './mention-dialog.directive';
 import { NgxFactory, NgxPosition, NgxSender } from '../ngx-tags';
 
@@ -11,13 +11,16 @@ export class MentionDialogComponent implements OnInit {
   @Input() component;
   @Input() factory: NgxFactory;
   @Input() position: NgxPosition;
+  @Input() inputValue = new EventEmitter;
   @Input() data: any;
 
+  @Output() sendInputValue = new EventEmitter;
   @Output() send = new EventEmitter<any>();
 
   isSend = false;
 
   refInjector: ReflectiveInjector;
+  componentRef: ComponentRef<any>;
 
   @ViewChild(MentionDialogDirective) mentionDialog: MentionDialogDirective;
 
@@ -38,6 +41,10 @@ export class MentionDialogComponent implements OnInit {
 
   ngOnInit() {
     this.loadComponent();
+
+    this.inputValue.subscribe(val => {
+      this.componentRef.instance.sendInputValue.next(val);
+    });
   }
 
   loadComponent() {
@@ -49,11 +56,11 @@ export class MentionDialogComponent implements OnInit {
 
     this.refInjector = ReflectiveInjector.resolveAndCreate([{ provide: this.component, useValue: this.component }], this.factory.injector);
 
-    const componentRef = viewContainerRef.createComponent(componentFactory, 0, this.refInjector);
+    this.componentRef = viewContainerRef.createComponent(componentFactory, 0, this.refInjector);
 
-    (componentRef.instance as NgxSender).inputData = this.data;
+    (this.componentRef.instance as NgxSender).inputData = this.data;
 
-    (componentRef.instance as NgxSender).sendData.subscribe(x => {
+    (this.componentRef.instance as NgxSender).sendData.subscribe(x => {
       this.send.emit(x);
     });
   }
